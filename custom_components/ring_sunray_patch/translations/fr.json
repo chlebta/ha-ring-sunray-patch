@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ring sunray patch",
+        "description": "Ajoute les modèles de sonnette Ring manquants (doorbell_sunray) pour que l'intégration Ring crée les entités event sonnerie et mouvement. L'intégration Ring sera rechargée."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Déjà configuré."
+    }
+  }
+}

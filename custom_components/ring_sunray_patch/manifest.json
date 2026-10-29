@@ -1,0 +1,14 @@
+{
+  "domain": "ring_sunray_patch",
+  "name": "Ring sunray patch",
+  "after_dependencies": ["ring"],
+  "codeowners": ["@chlebta"],
+  "config_flow": true,
+  "documentation": "https://github.com/chlebta/ha-ring-sunray-patch",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/chlebta/ha-ring-sunray-patch/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "1.0.0"
+}

@@ -8,6 +8,7 @@ in the ring-doorbell version bundled with Home Assistant.
 
 from __future__ import annotations
 
+from base64 import urlsafe_b64decode
 import logging
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
@@ -22,7 +23,16 @@ EXTRA_BATTERY_DOORBELL_KINDS = ("doorbell_sunray",)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Patch the kind lists, then reload Ring so it recreates its entities."""
-    const = await hass.async_add_import_executor_job(_import_ring_const)
+    const, fcmpushclient = await hass.async_add_import_executor_job(_import_modules)
+
+    # Ring sends the crypto-key and salt of its push messages without base64
+    # padding; firebase-messaging then raises "Incorrect padding" and shuts
+    # its push client down for good, leaving only the slow history polling.
+    # The module looks the name up at call time, so replacing it is enough.
+    patched_fcm = not getattr(fcmpushclient.urlsafe_b64decode, "_padded", False)
+    if patched_fcm:
+        fcmpushclient.urlsafe_b64decode = _padded_urlsafe_b64decode
+        _LOGGER.info("Patched firebase-messaging base64 decoding")
 
     # doorbot.py imports these list objects by reference and re-reads them on
     # every has_capability() call, so mutating them in place is enough.
@@ -31,11 +41,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for kind in EXTRA_BATTERY_DOORBELL_KINDS
         if kind not in const.DOORBELL_BATTERY_KINDS
     ]
-    if not added:
-        return True
+    if added:
+        const.DOORBELL_BATTERY_KINDS.extend(added)
+        _LOGGER.info("Added Ring battery doorbell kinds: %s", ", ".join(added))
 
-    const.DOORBELL_BATTERY_KINDS.extend(added)
-    _LOGGER.info("Added Ring battery doorbell kinds: %s", ", ".join(added))
+    # The reload also restarts a push client that already shut down.
+    if not added and not patched_fcm:
+        return True
 
     # Ring may already have created its entities without the patch, and at
     # startup its setup can run concurrently with ours.
@@ -59,10 +71,20 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-def _import_ring_const():
+def _import_modules():
+    from firebase_messaging import fcmpushclient  # noqa: PLC0415
     from ring_doorbell import const  # noqa: PLC0415
 
-    return const
+    return const, fcmpushclient
+
+
+def _padded_urlsafe_b64decode(data: bytes | str) -> bytes:
+    if isinstance(data, str):
+        data = data.encode("ascii")
+    return urlsafe_b64decode(data + b"=" * (-len(data) % 4))
+
+
+_padded_urlsafe_b64decode._padded = True  # type: ignore[attr-defined]
 
 
 @callback
